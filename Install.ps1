@@ -43,10 +43,8 @@ function SetEnvironmetVariable($EnvPathName,$EnvPathValue,$Vals)
         setx $EnvPathName "$ValToSet" /M | Out-Null
     }
 }
-
 #Fetch the config.ini to update the configuration
 $IniFile_NME = ".\config.ini"
-$DesFile_NME = ".\Install.ps1"
 $config = @{}
 
 Get-Content $IniFile_NME | foreach {
@@ -108,7 +106,8 @@ $PathToPythonScripts = "C:\python27\Scripts"
 $PathToIronPython = "C:\Program Files (x86)\IronPython 2.7"
 $PathToIronPythonScripts = "C:\Program Files (x86)\IronPython 2.7\Scripts"
 #>
-$PythonPipPackages = @( "robotframework==2.8.7", "robotframework-selenium2library", "robotframework-ride==1.4")
+
+$PythonPipPackages = @("robotframework==2.8.7", "robotframework-selenium2library", "robotframework-ride==1.4")
                         
 function InstallIronPython
 {

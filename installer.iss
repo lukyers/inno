@@ -28,35 +28,39 @@ SetupIconFile=C:\Users\zhangr32\Desktop\inno\InstallerIcon.ico
 Compression=lzma
 SolidCompression=yes
 SourceDir=C:\Users\zhangr32\Desktop\inno
-ArchitecturesInstallIn64BitMode=x64 ia64
+ArchitecturesInstallIn64BitMode=x64
 AllowRootDirectory=True
 DisableReadyPage=True
 DisableDirPage=True
 ;DisableProgramGroupPage=True
 DisableReadyMemo=True
+PrivilegesRequired=admin
 UninstallDisplayIcon={app}\InstallerIcon.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "C:\Users\zhangr32\Desktop\inno\InstallerIcon.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Install.cmd"; DestDir: "{app}"; Flags: ignoreversion 64bit; Check: IsWin64
-Source: "Install.ps1"; DestDir: "{app}"; Flags: ignoreversion 64bit; Check: IsWin64
+Source: "Install.cmd"; DestDir: "{app}"; Flags: ignoreversion 64bit; Permissions: users-full; Check: IsWin64
+Source: "Install.ps1"; DestDir: "{app}"; Flags: ignoreversion 64bit; Permissions: users-full; Check: IsWin64
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 Source: "logo.ps1"; DestDir: "{app}"; Flags: ignoreversion 64bit
-Source: "run.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "run.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "InstallerIcon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\InstallerIcon.ico"
-Name: "{group}\{cm:ProgramOnTheWeb,{#MyAppName}}"; Filename: "{#MyAppURL}"
+Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\Install.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\InstallerIcon.ico"; IconIndex: 0; Tasks: DesktopIcon QuickLaunchIcon
+Name: "{group}\{#MyAppName}"; Filename: "{app}\Install.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\InstallerIcon.ico"; IconIndex: 0
+Name: "{group}\Uninstall"; Filename: "{uninstallexe}"; WorkingDir: "{app}"; IconFilename: "{app}\InstallerIcon.ico"; IconIndex: 0
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: shellexec postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: 64bit postinstall skipifsilent
 
 [UninstallDelete]
 Type: files; Name: "{app}\config.ini"
+
+[Tasks]
+Name: "DesktopIcon"; Description: "CreateDesktopIcon"
+Name: "QuickLaunchIcon"; Description: "{cm:CreateQuickLaunchIcon}"
 
 [Code]
 var
