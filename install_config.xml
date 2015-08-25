@@ -1,0 +1,9 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<Setup>
+  <FileIpy>IronPython-2.7.5-32bit.msi</FileIpy>
+  <FolderIpybot>robotframework-2.9a3</FolderIpybot>
+  <FolderElementTree>elementtree-1.2.7-20070827-preview</FolderElementTree>
+  <FilePython>python-2.7.10-32bit.msi</FilePython>
+  <FilePythonPip>get-pip.py</FilePythonPip>
+  <FileWxPython>wxpython2.8-win32-unicode-2.8.12.1-py27.msi</FileWxPython>
+</Setup>

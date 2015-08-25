@@ -46,6 +46,7 @@ Source: "Install.ps1"; DestDir: "{app}"; Flags: ignoreversion 64bit; Permissions
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 Source: "logo.ps1"; DestDir: "{app}"; Flags: ignoreversion 64bit
 Source: "InstallerIcon.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "install_config.xml"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\Install.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\InstallerIcon.ico"; IconIndex: 0; Tasks: DesktopIcon QuickLaunchIcon
@@ -57,6 +58,7 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 
 [UninstallDelete]
 Type: files; Name: "{app}\config.ini"
+Type: dirifempty; Name: "{app}"
 
 [Tasks]
 Name: "DesktopIcon"; Description: "CreateDesktopIcon"
@@ -64,13 +66,47 @@ Name: "QuickLaunchIcon"; Description: "{cm:CreateQuickLaunchIcon}"
 
 [Code]
 var
-Page: TWizardPage;
-ServCfgPage, InstaCfgPage: Integer;
-msg: String;
-Edit1, Edit2, Edit3: TNewEdit;
-ComboBox1, ComboBox2, ComboBox3: TNewComboBox;
-ComboBox4, ComboBox5, ComboBox6: TNewComboBox;
-PasswordEdit: TPasswordEdit;
+  Page: TWizardPage;
+  ServCfgPage, InstaCfgPage: Integer;
+  msg: String;
+  install_config_Dir: String;
+  Edit1, Edit2, Edit3: TNewEdit;
+  ComboBox1, ComboBox2, ComboBox3: TNewComboBox;
+  ComboBox4, ComboBox5, ComboBox6: TNewComboBox;
+  PasswordEdit: TPasswordEdit;
+
+function LoadValueFromXML(const AFileName, APath: string): string;
+var
+  XMLNode: Variant;
+  XMLDocument: Variant;  
+begin
+  Result := '';
+  XMLDocument := CreateOleObject('Msxml2.DOMDocument.6.0');
+  try
+    XMLDocument.async := False;
+    XMLDocument.load(AFileName);
+    if (XMLDocument.parseError.errorCode <> 0) then
+      MsgBox('The XML file could not be parsed. ' + 
+        XMLDocument.parseError.reason, mbError, MB_OK)
+    else
+    begin
+      XMLDocument.setProperty('SelectionLanguage', 'XPath');
+      XMLNode := XMLDocument.selectSingleNode(APath);
+      Result := XMLNode.text;
+    end;
+  except
+    MsgBox('An error occured!' + #13#10 + GetExceptionMessage, mbError, MB_OK);
+  end;
+end;
+
+function GetItems(ComboBox: TComboBox; AFileName, APath: string): Integer;
+var
+  strs: string;
+begin
+  strs := LoadValueFromXML(AFileName, APath);
+  ComboBox.Items.Add(strs);
+  Result := 1;
+end;
 
 function GetConfig(CurPageID: Integer): Boolean;
 begin
@@ -104,6 +140,7 @@ procedure CreateTheWizardPages;
 var
   ST_CB1, ST_CB2, ST_CB3, ST_CB4, ST_CB5, ST_CB6: TNewStaticText;
   ST_ED1, ST_ED2, ST_ED3, ST_ED4: TNewStaticText;
+  str: String;
 
 begin
   { Server Config }
@@ -178,7 +215,8 @@ begin
   ComboBox1.Left := Page.SurfaceWidth div 4 - ComboBox1.Width div 2;
   ComboBox1.Parent := Page.Surface;
   ComboBox1.Style := csDropDownList;
-  ComboBox1.Items.Add('IronPython-2.7.5-32bit.msi');
+  GetItems(ComboBox1, install_config_Dir, '//Setup/FileIpy');
+  ComboBox1.Items.Add('');
   ComboBox1.ItemIndex := 0;
 
   ST_CB1 := TNewStaticText.Create(Page);
@@ -194,7 +232,8 @@ begin
   ComboBox2.Left := Page.SurfaceWidth div 4 - ComboBox1.Width div 2 + Page.SurfaceWidth div 2;
   ComboBox2.Parent := Page.Surface;
   ComboBox2.Style := csDropDownList;
-  ComboBox2.Items.Add('robotframework-2.9a3');
+  GetItems(ComboBox2, install_config_Dir, '//Setup/FolderIpybot');
+  ComboBox2.Items.Add('');
   ComboBox2.ItemIndex := 0;
 
   ST_CB2 := TNewStaticText.Create(Page);
@@ -210,7 +249,8 @@ begin
   ComboBox3.Left := ComboBox1.Left;
   ComboBox3.Parent := Page.Surface;
   ComboBox3.Style := csDropDownList;
-  ComboBox3.Items.Add('elementtree-1.2.7-20070827-preview');
+  GetItems(ComboBox3, install_config_Dir, '//Setup/FolderElementTree');
+  ComboBox3.Items.Add('');
   ComboBox3.ItemIndex := 0;
 
   ST_CB3 := TNewStaticText.Create(Page);
@@ -226,7 +266,8 @@ begin
   ComboBox4.Left := ComboBox2.Left;
   ComboBox4.Parent := Page.Surface;
   ComboBox4.Style := csDropDownList;
-  ComboBox4.Items.Add('python-2.7.10-32bit.msi');
+  GetItems(ComboBox4, install_config_Dir, '//Setup/FilePython');
+  ComboBox4.Items.Add('');
   ComboBox4.ItemIndex := 0;
 
   ST_CB4 := TNewStaticText.Create(Page);
@@ -242,7 +283,8 @@ begin
   ComboBox5.Left := ComboBox3.Left;
   ComboBox5.Parent := Page.Surface;
   ComboBox5.Style := csDropDownList;
-  ComboBox5.Items.Add('get-pip.py');
+  GetItems(ComboBox5, install_config_Dir, '//Setup/FilePythonPip');
+  ComboBox5.Items.Add('');
   ComboBox5.ItemIndex := 0;
 
   ST_CB5 := TNewStaticText.Create(Page);
@@ -258,7 +300,8 @@ begin
   ComboBox6.Left := ComboBox4.Left;
   ComboBox6.Parent := Page.Surface;
   ComboBox6.Style := csDropDownList;
-  ComboBox6.Items.Add('wxpython2.8-win32-unicode-2.8.12.1-py27.msi');
+  GetItems(ComboBox6, install_config_Dir, '//Setup/FileWxPython');
+  ComboBox6.Items.Add('');
   ComboBox6.ItemIndex := 0;
 
   ST_CB6 := TNewStaticText.Create(Page);
@@ -273,7 +316,18 @@ procedure InitializeWizard();
 var
   BackgroundBitmapImage: TBitmapImage;
   BackgroundBitmapText: TNewStaticText;
+  
 begin
+  install_config_Dir := WizardDirValue();
+  CreateDir(install_config_Dir);
+  install_config_Dir := install_config_Dir + '\install_config.xml';
+  if FileCopy(ExpandConstant('{src}\install_config.xml'), 
+    ExpandConstant(install_config_Dir), False) 
+  then
+
+  else
+    MsgBox('File copying failed!', mbError, MB_OK); 
+
   { Custom wizard pages }
 
   CreateTheWizardPages;
