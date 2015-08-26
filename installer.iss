@@ -5,7 +5,7 @@
 #define MyAppVersion "1.0"
 #define MyAppPublisher "EMC"
 #define MyAppURL "http://www.emc.com/"
-#define MyAppExeName "Install.cmd"
+#define MyAppExeName "Install.ps1"
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application.
@@ -46,15 +46,19 @@ Source: "Install.ps1"; DestDir: "{app}"; Flags: ignoreversion 64bit; Permissions
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 Source: "logo.ps1"; DestDir: "{app}"; Flags: ignoreversion 64bit
 Source: "InstallerIcon.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "install_config.xml"; DestDir: "{app}"; Flags: ignoreversion
+Source: "install_config.xml"; DestDir: "{app}"; Flags: ignoreversion 64bit
+Source: "GetRemoteDir.ps1"; DestDir: "{app}"; Flags: ignoreversion 64bit; Permissions: users-full; Check: IsWin64
+Source: "GetRemoteDir.cmd"; DestDir: "{app}"; Flags: ignoreversion 64bit; Permissions: users-full; Check: IsWin64
+Source: "UninstallIcon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\Install.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\InstallerIcon.ico"; IconIndex: 0; Tasks: DesktopIcon QuickLaunchIcon
 Name: "{group}\{#MyAppName}"; Filename: "{app}\Install.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\InstallerIcon.ico"; IconIndex: 0
-Name: "{group}\Uninstall"; Filename: "{uninstallexe}"; WorkingDir: "{app}"; IconFilename: "{app}\InstallerIcon.ico"; IconIndex: 0
+Name: "{group}\Uninstall"; Filename: "{uninstallexe}"; WorkingDir: "{app}"; IconFilename: "{app}\UninstallIcon.ico"; IconIndex: 0
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: 64bit postinstall skipifsilent
+;Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: 64bit postinstall skipifsilent waituntilterminated
+Filename: "powershell.exe"; Description: Run Script; Parameters: "/c & .\{#MyAppExeName}"; WorkingDir: "{app}"; Flags: 64bit postinstall skipifsilent waituntilterminated
 
 [UninstallDelete]
 Type: files; Name: "{app}\config.ini"
@@ -74,13 +78,17 @@ var
   ComboBox1, ComboBox2, ComboBox3: TNewComboBox;
   ComboBox4, ComboBox5, ComboBox6: TNewComboBox;
   PasswordEdit: TPasswordEdit;
+  work_Dir, cmd_Dir, ps1_Dir: String;
+  ErrorCode: Integer;
 
-function LoadValueFromXML(const AFileName, APath: string): string;
+function LoadValueFromXML(const AFileName, APath: string): TStringList;
 var
   XMLNode: Variant;
-  XMLDocument: Variant;  
+  XMLDocument: Variant;
+  len, i: integer;
+  str: TStringList;  
 begin
-  Result := '';
+  str := TstringList.Create;
   XMLDocument := CreateOleObject('Msxml2.DOMDocument.6.0');
   try
     XMLDocument.async := False;
@@ -91,121 +99,39 @@ begin
     else
     begin
       XMLDocument.setProperty('SelectionLanguage', 'XPath');
-      XMLNode := XMLDocument.selectSingleNode(APath);
-      Result := XMLNode.text;
+      //XMLNode := XMLDocument.selectSingleNode(APath);
+      XMLNode := XMLDocument.selectNodes(APath);
+      len := XMLNode.Length;
+      for i := 0 to len - 1 do
+      begin
+        str.Add(XMLNode.Item(i).text);
+      end;
+      Result := str;
     end;
   except
     MsgBox('An error occured!' + #13#10 + GetExceptionMessage, mbError, MB_OK);
+    Abort;
   end;
 end;
 
 function GetItems(ComboBox: TComboBox; AFileName, APath: string): Integer;
 var
-  strs: string;
+  strs: TStringList;
+  value: String;
+  i: Integer;
 begin
+  strs := TstringList.Create;
   strs := LoadValueFromXML(AFileName, APath);
-  ComboBox.Items.Add(strs);
+  for i := 0 to strs.Count - 1 do
+    ComboBox.Items.Add(strs[i]);
   Result := 1;
 end;
 
-function GetConfig(CurPageID: Integer): Boolean;
-begin
-  if CurPageID = ServCfgPage then
-  begin
-    if SetIniString('ServerConfig', 'RemoteHost', Edit1.Text, ExpandConstant('{app}\config.ini')) and
-        SetIniString('ServerConfig', 'RemoteSoftwareRepo', Edit2.Text, ExpandConstant('{app}\config.ini')) and
-        SetIniString('ServerConfig', 'username', Edit3.Text, ExpandConstant('{app}\config.ini')) and
-        SetIniString('ServerConfig', 'password', PasswordEdit.Text, ExpandConstant('{app}\config.ini')) = false then
-      MsgBox('Server Configuration failed', mbError, MB_OK);                
-  end;
-  if CurPageID = InstaCfgPage then
-  begin
-    if SetIniString('InstallConfig', 'FileIpy', ComboBox1.Text, ExpandConstant('{app}\config.ini')) and
-        SetIniString('InstallConfig', 'FolderIpybot', ComboBox2.Text, ExpandConstant('{app}\config.ini')) and
-        SetIniString('InstallConfig', 'FolderElementTree', ComboBox3.Text, ExpandConstant('{app}\config.ini')) and
-        SetIniString('InstallConfig', 'FilePython', ComboBox4.Text, ExpandConstant('{app}\config.ini')) and
-        SetIniString('InstallConfig', 'FilePythonPip', ComboBox5.Text, ExpandConstant('{app}\config.ini')) and
-        SetIniString('InstallConfig', 'FileWxPython', ComboBox6.Text, ExpandConstant('{app}\config.ini')) = false then
-      MsgBox('Install Configuration failed', mbError, MB_OK);
-  end;
-  result := true;
-end;
-
-function NextButtonClick(CurPageID: Integer): Boolean;
-begin
-    result := GetConfig(CurPageID);
-end;
-
-procedure CreateTheWizardPages;
+procedure CreateTheWizardPages2;
 var
   ST_CB1, ST_CB2, ST_CB3, ST_CB4, ST_CB5, ST_CB6: TNewStaticText;
-  ST_ED1, ST_ED2, ST_ED3, ST_ED4: TNewStaticText;
-  str: String;
 
 begin
-  { Server Config }
-
-  Page := CreateCustomPage(wpInstalling, 'Server Configuration', '');
-  ServCfgPage := Page.ID;
-
-  Edit1 := TNewEdit.Create(Page);
-  Edit1.Top := ScaleY(30);
-  Edit1.Width := Page.SurfaceWidth - ScaleX(80);
-  Edit1.Left := (Page.SurfaceWidth - Edit1.Width) div 2;
-  Edit1.Text := '10.102.6.183';
-  Edit1.Parent := Page.Surface;
-
-  ST_ED1 := TNewStaticText.Create(Page);
-  ST_ED1.Top := Edit1.Top - Edit1.Height;
-  ST_ED1.Left := Edit1.Left;
-  ST_ED1.Caption := 'Remote Host';
-  ST_ED1.AutoSize := True;
-  ST_ED1.Parent := Page.Surface;
-
-  Edit2 := TNewEdit.Create(Page);
-  Edit2.Top := Edit1.Top + ScaleY(50);
-  Edit2.Width := Edit1.Width;
-  Edit2.Left := Edit1.Left;
-  Edit2.Text := '\\' + Edit1.Text + '\Softwares';
-  Edit2.Parent := Page.Surface;
-
-  ST_ED2 := TNewStaticText.Create(Page);
-  ST_ED2.Top := Edit2.Top - Edit2.Height;
-  ST_ED2.Left := Edit1.Left;
-  ST_ED2.Caption := 'Remote Software Repo';
-  ST_ED2.AutoSize := True;
-  ST_ED2.Parent := Page.Surface;
-
-  Edit3 := TNewEdit.Create(Page);
-  Edit3.Top := Edit2.Top + ScaleY(50);
-  Edit3.Width := Edit2.Width;
-  Edit3.Left := Edit2.Left;
-  Edit3.Text := 'Administrator';
-  Edit3.Parent := Page.Surface;
-
-  ST_ED3 := TNewStaticText.Create(Page);
-  ST_ED3.Top := Edit3.Top - Edit3.Height;
-  ST_ED3.Left := Edit1.Left;
-  ST_ED3.Caption := 'Username';
-  ST_ED3.AutoSize := True;
-  ST_ED3.Parent := Page.Surface;
-
-  PasswordEdit := TPasswordEdit.Create(Page);
-  PasswordEdit.Left := Edit3.Left;
-  PasswordEdit.Top := Edit3.Top + ScaleY(50);
-  PasswordEdit.Width := Edit3.Width;
-  PasswordEdit.Text := 'Password123!';
-  PasswordEdit.Parent := Page.Surface;
-
-  ST_ED4 := TNewStaticText.Create(Page);
-  ST_ED4.Top := PasswordEdit.Top - PasswordEdit.Height;
-  ST_ED4.Left := PasswordEdit.Left;
-  ST_ED4.Caption := 'Password';
-  ST_ED4.AutoSize := True;
-  ST_ED4.Parent := Page.Surface;
-
-  { Install Config }
-
   Page := CreateCustomPage(Page.ID, 'Install Configuration', '');
   InstaCfgPage := Page.ID;
 
@@ -312,24 +238,276 @@ begin
   ST_CB6.Parent := Page.Surface;
 end;
 
+function GetConfig(CurPageID: Integer): Boolean;
+begin
+  if CurPageID = ServCfgPage then
+  begin
+    if SetIniString('ServerConfig', 'RemoteHost', Edit1.Text, ExpandConstant('{app}\config.ini')) and
+        SetIniString('ServerConfig', 'RemoteSoftwareRepo', Edit2.Text, ExpandConstant('{app}\config.ini')) and
+        SetIniString('ServerConfig', 'username', Edit3.Text, ExpandConstant('{app}\config.ini')) and
+        SetIniString('ServerConfig', 'password', PasswordEdit.Text, ExpandConstant('{app}\config.ini')) = false then
+      begin
+        MsgBox('Server Configuration failed', mbError, MB_OK);
+      end
+    else
+    begin
+      if not Exec('powershell.exe', '/c & ".\GetRemoteDir.ps1"', work_Dir,
+         SW_SHOW, ewWaitUntilTerminated, ErrorCode) then 
+      begin
+        MsgBox('GetRemoteDir failed!', mbError, MB_OK); 
+        Abort;
+      end;
+      CreateTheWizardPages2;
+    end;
+  end;
+  if CurPageID = InstaCfgPage then
+  begin
+    if SetIniString('InstallConfig', 'FileIpy', ComboBox1.Text, ExpandConstant('{app}\config.ini')) and
+        SetIniString('InstallConfig', 'FolderIpybot', ComboBox2.Text, ExpandConstant('{app}\config.ini')) and
+        SetIniString('InstallConfig', 'FolderElementTree', ComboBox3.Text, ExpandConstant('{app}\config.ini')) and
+        SetIniString('InstallConfig', 'FilePython', ComboBox4.Text, ExpandConstant('{app}\config.ini')) and
+        SetIniString('InstallConfig', 'FilePythonPip', ComboBox5.Text, ExpandConstant('{app}\config.ini')) and
+        SetIniString('InstallConfig', 'FileWxPython', ComboBox6.Text, ExpandConstant('{app}\config.ini')) = false then
+      MsgBox('Install Configuration failed', mbError, MB_OK);
+  end;
+  result := true;
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+    result := GetConfig(CurPageID);
+end;
+
+procedure EditOnClick(Sender: TObject);
+begin
+  Edit2.Text := '\\' + Edit1.Text + '\Softwares';
+end;
+
+procedure CreateTheWizardPages;
+var
+  //ST_CB1, ST_CB2, ST_CB3, ST_CB4, ST_CB5, ST_CB6: TNewStaticText;
+  ST_ED1, ST_ED2, ST_ED3, ST_ED4: TNewStaticText;
+  str: String;
+
+begin
+  { Server Config }
+
+  Page := CreateCustomPage(wpInstalling, 'Server Configuration', '');
+  ServCfgPage := Page.ID;
+
+  Edit1 := TNewEdit.Create(Page);
+  Edit1.Top := ScaleY(30);
+  Edit1.Width := Page.SurfaceWidth - ScaleX(80);
+  Edit1.Left := (Page.SurfaceWidth - Edit1.Width) div 2;
+  Edit1.Text := '10.102.6.183';
+  Edit1.Parent := Page.Surface;
+
+  ST_ED1 := TNewStaticText.Create(Page);
+  ST_ED1.Top := Edit1.Top - Edit1.Height;
+  ST_ED1.Left := Edit1.Left;
+  ST_ED1.Caption := 'Remote Host';
+  ST_ED1.AutoSize := True;
+  ST_ED1.Parent := Page.Surface;
+
+  Edit2 := TNewEdit.Create(Page);
+  Edit2.Top := Edit1.Top + ScaleY(50);
+  Edit2.Width := Edit1.Width;
+  Edit2.Left := Edit1.Left;
+  Edit2.OnClick := @EditOnClick;
+  Edit2.Text := '\\' + Edit1.Text + '\Softwares';
+  Edit2.Parent := Page.Surface;
+
+  ST_ED2 := TNewStaticText.Create(Page);
+  ST_ED2.Top := Edit2.Top - Edit2.Height;
+  ST_ED2.Left := Edit1.Left;
+  ST_ED2.Caption := 'Remote Software Repo';
+  ST_ED2.AutoSize := True;
+  ST_ED2.Parent := Page.Surface;
+
+  Edit3 := TNewEdit.Create(Page);
+  Edit3.Top := Edit2.Top + ScaleY(50);
+  Edit3.Width := Edit2.Width;
+  Edit3.Left := Edit2.Left;
+  Edit3.Text := 'Administrator';
+  Edit3.Parent := Page.Surface;
+
+  ST_ED3 := TNewStaticText.Create(Page);
+  ST_ED3.Top := Edit3.Top - Edit3.Height;
+  ST_ED3.Left := Edit1.Left;
+  ST_ED3.Caption := 'Username';
+  ST_ED3.AutoSize := True;
+  ST_ED3.Parent := Page.Surface;
+
+  PasswordEdit := TPasswordEdit.Create(Page);
+  PasswordEdit.Left := Edit3.Left;
+  PasswordEdit.Top := Edit3.Top + ScaleY(50);
+  PasswordEdit.Width := Edit3.Width;
+  PasswordEdit.Text := 'Password123!';
+  PasswordEdit.Parent := Page.Surface;
+
+  ST_ED4 := TNewStaticText.Create(Page);
+  ST_ED4.Top := PasswordEdit.Top - PasswordEdit.Height;
+  ST_ED4.Left := PasswordEdit.Left;
+  ST_ED4.Caption := 'Password';
+  ST_ED4.AutoSize := True;
+  ST_ED4.Parent := Page.Surface;
+
+  { Install Config }
+(*
+  Page := CreateCustomPage(Page.ID, 'Install Configuration', '');
+  InstaCfgPage := Page.ID;
+
+  ComboBox1 := TNewComboBox.Create(Page);
+  ComboBox1.Top := ScaleY(50);
+  ComboBox1.Width := ScaleX(200);
+  ComboBox1.Left := Page.SurfaceWidth div 4 - ComboBox1.Width div 2;
+  ComboBox1.Parent := Page.Surface;
+  ComboBox1.Style := csDropDownList;
+  GetItems(ComboBox1, install_config_Dir, '//Setup/FileIpy');
+  ComboBox1.Items.Add('');
+  ComboBox1.ItemIndex := 0;
+
+  ST_CB1 := TNewStaticText.Create(Page);
+  ST_CB1.Top := ComboBox1.Top - ComboBox1.Height;
+  ST_CB1.Left := ComboBox1.Left;
+  ST_CB1.Caption := 'Iron Python';
+  ST_CB1.AutoSize := True;
+  ST_CB1.Parent := Page.Surface;
+
+  ComboBox2 := TNewComboBox.Create(Page);
+  ComboBox2.Top := ComboBox1.Top;
+  ComboBox2.Width := ComboBox1.Width;
+  ComboBox2.Left := Page.SurfaceWidth div 4 - ComboBox1.Width div 2 + Page.SurfaceWidth div 2;
+  ComboBox2.Parent := Page.Surface;
+  ComboBox2.Style := csDropDownList;
+  GetItems(ComboBox2, install_config_Dir, '//Setup/FolderIpybot');
+  ComboBox2.Items.Add('');
+  ComboBox2.ItemIndex := 0;
+
+  ST_CB2 := TNewStaticText.Create(Page);
+  ST_CB2.Top := ComboBox2.Top - ComboBox2.Height;
+  ST_CB2.Left := ComboBox2.Left;
+  ST_CB2.Caption := 'Robot Framework';
+  ST_CB2.AutoSize := True;
+  ST_CB2.Parent := Page.Surface;
+
+  ComboBox3 := TNewComboBox.Create(Page);
+  ComboBox3.Top := ComboBox1.Top + ScaleY(50);
+  ComboBox3.Width := ComboBox1.Width;
+  ComboBox3.Left := ComboBox1.Left;
+  ComboBox3.Parent := Page.Surface;
+  ComboBox3.Style := csDropDownList;
+  GetItems(ComboBox3, install_config_Dir, '//Setup/FolderElementTree');
+  ComboBox3.Items.Add('');
+  ComboBox3.ItemIndex := 0;
+
+  ST_CB3 := TNewStaticText.Create(Page);
+  ST_CB3.Top := ComboBox3.Top - ComboBox3.Height;
+  ST_CB3.Left := ComboBox1.Left;
+  ST_CB3.Caption := 'Element Tree';
+  ST_CB3.AutoSize := True;
+  ST_CB3.Parent := Page.Surface;
+
+  ComboBox4 := TNewComboBox.Create(Page);
+  ComboBox4.Top := ComboBox3.Top;
+  ComboBox4.Width := ComboBox3.Width;
+  ComboBox4.Left := ComboBox2.Left;
+  ComboBox4.Parent := Page.Surface;
+  ComboBox4.Style := csDropDownList;
+  GetItems(ComboBox4, install_config_Dir, '//Setup/FilePython');
+  ComboBox4.Items.Add('');
+  ComboBox4.ItemIndex := 0;
+
+  ST_CB4 := TNewStaticText.Create(Page);
+  ST_CB4.Top := ComboBox4.Top - ComboBox4.Height;
+  ST_CB4.Left := ComboBox4.Left;
+  ST_CB4.Caption := 'Python';
+  ST_CB4.AutoSize := True;
+  ST_CB4.Parent := Page.Surface;
+
+  ComboBox5 := TNewComboBox.Create(Page);
+  ComboBox5.Top := ComboBox3.Top + ScaleY(50);
+  ComboBox5.Width := ComboBox3.Width;
+  ComboBox5.Left := ComboBox3.Left;
+  ComboBox5.Parent := Page.Surface;
+  ComboBox5.Style := csDropDownList;
+  GetItems(ComboBox5, install_config_Dir, '//Setup/FilePythonPip');
+  ComboBox5.Items.Add('');
+  ComboBox5.ItemIndex := 0;
+
+  ST_CB5 := TNewStaticText.Create(Page);
+  ST_CB5.Top := ComboBox5.Top - ComboBox5.Height;
+  ST_CB5.Left := ComboBox5.Left;
+  ST_CB5.Caption := 'Python Pip';
+  ST_CB5.AutoSize := True;
+  ST_CB5.Parent := Page.Surface;
+
+  ComboBox6 := TNewComboBox.Create(Page);
+  ComboBox6.Top := ComboBox5.Top;
+  ComboBox6.Width := ComboBox5.Width;
+  ComboBox6.Left := ComboBox4.Left;
+  ComboBox6.Parent := Page.Surface;
+  ComboBox6.Style := csDropDownList;
+  GetItems(ComboBox6, install_config_Dir, '//Setup/FileWxPython');
+  ComboBox6.Items.Add('');
+  ComboBox6.ItemIndex := 0;
+
+  ST_CB6 := TNewStaticText.Create(Page);
+  ST_CB6.Top := ComboBox6.Top - ComboBox6.Height;
+  ST_CB6.Left := ComboBox6.Left;
+  ST_CB6.Caption := 'WxPython';
+  ST_CB6.AutoSize := True;
+  ST_CB6.Parent := Page.Surface;
+*)
+end;
+
+function IsAppRunning(const FileName : string): Boolean;
+var
+    FSWbemLocator: Variant;
+    FWMIService   : Variant;
+    FWbemObjectSet: Variant;
+begin
+    Result := false;
+    FSWbemLocator := CreateOleObject('WBEMScripting.SWBEMLocator');
+    FWMIService := FSWbemLocator.ConnectServer('', 'root\CIMV2', '', '');
+    FWbemObjectSet := FWMIService.ExecQuery(Format('SELECT Name FROM Win32_Process Where Name="%s"',[FileName]));
+    Result := (FWbemObjectSet.Count > 0);
+    FWbemObjectSet := Unassigned;
+    FWMIService := Unassigned;
+    FSWbemLocator := Unassigned;
+end;
+
 procedure InitializeWizard();
 var
   BackgroundBitmapImage: TBitmapImage;
   BackgroundBitmapText: TNewStaticText;
   
 begin
-  install_config_Dir := WizardDirValue();
-  CreateDir(install_config_Dir);
-  install_config_Dir := install_config_Dir + '\install_config.xml';
-  if FileCopy(ExpandConstant('{src}\install_config.xml'), 
-    ExpandConstant(install_config_Dir), False) 
-  then
-
+  work_Dir := WizardDirValue();
+  CreateDir(work_Dir);
+  ps1_Dir := work_Dir + '\GetRemoteDir.ps1';
+  cmd_Dir := work_Dir + '\GetRemoteDir.cmd';
+  install_config_Dir := work_Dir + '\install_config.xml';
+(*  if FileCopy(ExpandConstant('install_config.xml'), 
+    ExpandConstant(install_config_Dir), False) and
+     FileCopy(ExpandConstant('GetRemoteDir.ps1'), 
+    ExpandConstant(ps1_Dir), False) and
+     FileCopy(ExpandConstant('GetRemoteDir.cmd'), 
+    ExpandConstant(cmd_Dir), False) then
   else
-    MsgBox('File copying failed!', mbError, MB_OK); 
-
+  begin
+    MsgBox('File copying failed!', mbError, MB_OK);
+    Abort; 
+  end;
+*)
+//  if not Exec('powershell.exe', '/c & ".\GetRemoteDir.ps1"', work_Dir,
+//     SW_SHOW, ewWaitUntilTerminated, ErrorCode) then 
+//  begin
+//    MsgBox('GetRemoteDir failed!', mbError, MB_OK); 
+//    Abort;
+//  end;
   { Custom wizard pages }
-
+  
   CreateTheWizardPages;
 
   { Custom beveled label }
